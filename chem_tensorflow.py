@@ -102,23 +102,25 @@ class ChemModel(object):
             self.valid_writer = tf.summary.FileWriter(os.path.join(tb_log_dir, 'validation'), graph=self.graph)
 
     def load_data(self, file_name, is_training_data: bool):
+        print("Enter the function 'load_data' ")
         full_path = os.path.join(self.data_dir, file_name)
 
         print("Loading data from %s" % full_path)
         with open(full_path, 'r') as f:
             data = json.load(f)
+        print("***the data type of 'data' is "+str(type(data)))
 
         restrict = self.args.get("--restrict_data")
         if restrict is not None and restrict > 0:
             data = data[:restrict]
 
         # Get some common data out:
-        num_fwd_edge_types = 0
-        for g in data:
-            self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
-            num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
-        self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
-        self.annotation_size = max(self.annotation_size, len(data[0]["node_features"][0]))
+        #num_fwd_edge_types = 0
+        #for g in data:
+        #    self.max_num_vertices = max(self.max_num_vertices, max([v for e in g['graph'] for v in [e[0], e[2]]]))
+        #    num_fwd_edge_types = max(num_fwd_edge_types, max([e[1] for e in g['graph']]))
+        #self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
+        #self.annotation_size = max(self.annotation_size, len(data[0]["node_features"][0]))
 
         return self.process_raw_graphs(data, is_training_data)
 
