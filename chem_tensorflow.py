@@ -8,10 +8,20 @@ import time
 from typing import List, Any, Sequence
 
 import numpy as np
-import tensorflow as tf
 
 from utils import MLP, ThreadedIterator, SMALL_NUMBER
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+from tensor2tensor.data_generators import librispeech
+from tensor2tensor.data_generators import problem_hparams
+from tensor2tensor.models import transformer
+
+import tensorflow.compat.v1 as tf
+
+VOCAB_SIZE = 10
 
 class ChemModel(object):
     @classmethod
@@ -80,7 +90,8 @@ class ChemModel(object):
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         self.graph = tf.Graph()
-        self.sess = tf.Session(graph=self.graph, config=config)
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
         with self.graph.as_default():
             tf.set_random_seed(params['random_seed'])
             self.placeholders = {}
@@ -122,7 +133,7 @@ class ChemModel(object):
         #self.num_edge_types = max(self.num_edge_types, num_fwd_edge_types * (1 if self.params['tie_fwd_bkwd'] else 2))
         #self.annotation_size = max(self.annotation_size, len(data[0]["node_features"][0]))
 
-        return self.process_raw_graphs(data, is_training_data)
+        return data
 
     @staticmethod
     def graph_string_to_array(graph_string: str) -> List[List[int]]:
@@ -133,20 +144,19 @@ class ChemModel(object):
         raise Exception("Models have to implement process_raw_graphs!")
 
     def make_model(self):
-        self.placeholders['target_values'] = tf.placeholder(tf.float32, [len(self.params['task_ids']), None],
-                                                            name='target_values')
-        self.placeholders['target_mask'] = tf.placeholder(tf.float32, [len(self.params['task_ids']), None],
-                                                          name='target_mask')
-        self.placeholders['num_graphs'] = tf.placeholder(tf.int32, [], name='num_graphs')
-        self.placeholders['out_layer_dropout_keep_prob'] = tf.placeholder(tf.float32, [], name='out_layer_dropout_keep_prob')
-
-        with tf.variable_scope("graph_model"):
-            self.prepare_specific_graph_model()
-            # This does the actual graph work:
-            if self.params['use_graph']:
-                self.ops['final_node_representations'] = self.compute_final_node_representations()
-            else:
-                self.ops['final_node_representations'] = tf.zeros_like(self.placeholders['initial_node_representation'])
+       
+        hparams = transformer.transformer_small()
+        hparams.hidden_size = 8
+        hparams.filter_size = 32
+        hparams.num_heads = 1
+        hparams.layer_prepostprocess_dropout = 0.0
+        
+        if hparams.get("problem_hparams", None) is None:
+            p_hparams = problem_hparams.test_problem_hparams(VOCAB_SIZE,
+                                                     VOCAB_SIZE,
+                                                     hparams)
+        hparams.problem_hparams = p_hparams
+        self.model = model_cls(hparams, tf.estimator.ModeKeys.TRAIN, p_hparams)
 
         self.ops['losses'] = []
         for (internal_id, task_id) in enumerate(self.params['task_ids']):
