@@ -244,6 +244,17 @@ class ChemModel(object):
             else:
                 batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
                 fetch_list = [self.ops['loss'], accuracy_ops, self.ops['summary']]
+            
+            #fetch_list = [input_data, target_data]
+            #my_result = self.sess.run(fetch_list,feed_dict = batch_data)
+            features = {
+                "inputs":batch_data[self.placeholders['inputs']]
+                "targets":batch_data[self.placeholders['targets']]
+                "target_space_id":1
+            }
+            logits, _ = self.model(features)
+            output = self.sess.run(logits)
+            
             result = self.sess.run(fetch_list, feed_dict=batch_data)
             (batch_loss, batch_accuracies, batch_summary) = (result[0], result[1], result[2])
             writer = self.train_writer if is_training else self.valid_writer
