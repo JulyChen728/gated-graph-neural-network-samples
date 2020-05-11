@@ -48,25 +48,31 @@ class MYTRANSFORMERModel(ChemModel):
         if is_training:
             np.random.shuffle(data)
         num_sample = 0
-        num_offset = 0
-        inputs = []
-        targets = []
-        #while num_sample < len(data) and num_offset < self.params['batch_size']:
+        
         while num_sample < len(data):
-            d = data[num_sample]
-            for key in d:
-                #key is the file name
-                file_full_name = dir + key
-                with open(file_full_name,"r") as fp:
-                    input = fp.read() 
-                    inputs.append(input)
-                target = d[key]
-                targets.append(target)
-                num_sample += 1
-                num_offset += 1
+            num_offset = 0
+            inputs = []
+            targets = []
+            while num_sample < len(data) and num_offset < self.params['batch_size']:
+                d = data[num_sample]
+                for key in d:
+                    #key is the file name
+                    file_full_name = dir + key
+                    with open(file_full_name,"r") as fp:
+                        input = fp.read() 
+                        inputs.append(input)
+                    target = d[key]
+                    targets.append(target)
+                    num_sample += 1
+                    num_offset += 1
+            batch_feed_dict = {
+                self.placeholders['inputs']: np.array(inputs),
+                self.placeholders['targets']: np.array(targets)
+            }
+           
+            yield batch_feed_dict
+            
+            
         assert num_sample == len(data)
-        batch_feed_dict = {
-            self.placeholders['inputs']: np.array(inputs),
-            self.placeholders['targets']: np.array(targets)
-        }
-        yield batch_feed_dict
+        
+        
