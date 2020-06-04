@@ -255,51 +255,63 @@ class ChemModel(object):
         accuracies = []
         accuracy_ops = [self.ops['accuracy_task%i' % task_id] for task_id in self.params['task_ids']]
         start_time = time.time()
-        processed_graphs = 0
+        processed_data = 0
         steps = 0
         batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, is_training), max_queue_size=5)
         
         with tf.Session() as session:
             
             for my_step, my_batch_data in enumerate(batch_iterator):
+                precessed_data += self.params['batch_size']
                 #other information should be in fetch_list like loss
-                fetch_list = [self.ops['loss'], logits, self.ops['summary'], self.ops['train_step']]
+                fetch_list = [self.ops['loss'], logits]
                 result = session.run(fetch_list,feed_dict = my_batch_data)
                 #result is the output layer
-                   
-        for step, batch_data in enumerate(batch_iterator):
-            num_graphs = batch_data[self.placeholders['num_graphs']]
-            processed_graphs += num_graphs
-            if is_training:
-                batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
-                fetch_list = [self.ops['loss'], accuracy_ops, self.ops['summary'], self.ops['train_step']]
-            else:
-                batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
-                fetch_list = [self.ops['loss'], accuracy_ops, self.ops['summary']]
+                (batch_loss, batch_logits) = (result[0],result[1])
+                loss += batch_loss * self.params['batch_size'] 
+                print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
+                                                                               step,
+                                                                               self.params['batch_size'],
+                                                                               loss / processed_data),
+                  end='\r')
+                steps += 1
+            loss = loss / processed_data
+            instance_per_sec = processed_data / (time.time() - start_time)
+        return loss, instance_per_sec, steps 
+        
+        #for step, batch_data in enumerate(batch_iterator):
+        #    num_graphs = batch_data[self.placeholders['num_graphs']]
+        #    processed_graphs += num_graphs
+        #    if is_training:
+        #        batch_data[self.placeholders['out_layer_dropout_keep_prob']] = self.params['out_layer_dropout_keep_prob']
+        #        fetch_list = [self.ops['loss'], accuracy_ops, self.ops['summary'], self.ops['train_step']]
+        #    else:
+        #        batch_data[self.placeholders['out_layer_dropout_keep_prob']] = 1.0
+        #        fetch_list = [self.ops['loss'], accuracy_ops, self.ops['summary']]
             
             #fetch_list = [input_data, target_data]
             #my_result = self.sess.run(fetch_list,feed_dict = batch_data)
             #output = self.sess.run(logits)
             
-            result = self.sess.run(fetch_list, feed_dict=batch_data)
-            (batch_loss, batch_accuracies, batch_summary) = (result[0], result[1], result[2])
-            writer = self.train_writer if is_training else self.valid_writer
-            writer.add_summary(batch_summary, start_step + step)
-            loss += batch_loss * num_graphs
-            accuracies.append(np.array(batch_accuracies) * num_graphs)
+        #    result = self.sess.run(fetch_list, feed_dict=batch_data)
+        #    (batch_loss, batch_accuracies, batch_summary) = (result[0], result[1], result[2])
+        #    writer = self.train_writer if is_training else self.valid_writer
+        #    writer.add_summary(batch_summary, start_step + step)
+        #    loss += batch_loss * num_graphs
+        #    accuracies.append(np.array(batch_accuracies) * num_graphs)
 
-            print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
-                                                                               step,
-                                                                               num_graphs,
-                                                                               loss / processed_graphs),
-                  end='\r')
-            steps += 1
+        #    print("Running %s, batch %i (has %i graphs). Loss so far: %.4f" % (epoch_name,
+        #                                                                       step,
+        #                                                                       num_graphs,
+        #                                                                       loss / processed_graphs),
+        #          end='\r')
+        #    steps += 1
 
-        accuracies = np.sum(accuracies, axis=0) / processed_graphs
-        loss = loss / processed_graphs
-        error_ratios = accuracies / chemical_accuracies[self.params["task_ids"]]
-        instance_per_sec = processed_graphs / (time.time() - start_time)
-        return loss, accuracies, error_ratios, instance_per_sec, steps
+        #accuracies = np.sum(accuracies, axis=0) / processed_graphs
+        #loss = loss / processed_graphs
+        #error_ratios = accuracies / chemical_accuracies[self.params["task_ids"]]
+        #instance_per_sec = processed_graphs / (time.time() - start_time)
+        #return loss, accuracies, error_ratios, instance_per_sec, steps
 
     def train(self):
         log_to_save = []
@@ -314,36 +326,41 @@ class ChemModel(object):
                 (best_val_acc, best_val_acc_epoch) = (float("+inf"), 0)
             for epoch in range(1, self.params['num_epochs'] + 1):
                 print("== Epoch %i" % epoch)
-                train_loss, train_accs, train_errs, train_speed, train_steps = self.run_epoch("epoch %i (training)" % epoch,
+                train_loss, train_speed, train_steps = self.run_epoch("epoch %i (training)" % epoch,
                                                                                               self.train_data, True, self.train_step_id)
+                #train_loss, train_accs, train_errs, train_speed, train_steps = self.run_epoch("epoch %i (training)" % epoch,
+                #                                                                              self.train_data, True, self.train_step_id)
                 self.train_step_id += train_steps
-                accs_str = " ".join(["%i:%.5f" % (id, acc) for (id, acc) in zip(self.params['task_ids'], train_accs)])
-                errs_str = " ".join(["%i:%.5f" % (id, err) for (id, err) in zip(self.params['task_ids'], train_errs)])
-                print("\r\x1b[K Train: loss: %.5f | acc: %s | error_ratio: %s | instances/sec: %.2f" % (train_loss,
-                                                                                                        accs_str,
-                                                                                                        errs_str,
+                #accs_str = " ".join(["%i:%.5f" % (id, acc) for (id, acc) in zip(self.params['task_ids'], train_accs)])
+                #errs_str = " ".join(["%i:%.5f" % (id, err) for (id, err) in zip(self.params['task_ids'], train_errs)])
+                print("\r\x1b[K Train: loss: %.5f | instances/sec: %.2f" % (train_loss,
+                                                                                                       # accs_str,
+                                                                                                       # errs_str,
                                                                                                         train_speed))
-                valid_loss, valid_accs, valid_errs, valid_speed, valid_steps = self.run_epoch("epoch %i (validation)" % epoch,
+                valid_loss, valid_speed, valid_steps = self.run_epoch("epoch %i (validation)" % epoch,
                                                                                               self.valid_data, False, self.valid_step_id)
+                #valid_loss, valid_accs, valid_errs, valid_speed, valid_steps = self.run_epoch("epoch %i (validation)" % epoch,
+                #                                                                              self.valid_data, False, self.valid_step_id)
                 self.valid_step_id += valid_steps
-                accs_str = " ".join(["%i:%.5f" % (id, acc) for (id, acc) in zip(self.params['task_ids'], valid_accs)])
-                errs_str = " ".join(["%i:%.5f" % (id, err) for (id, err) in zip(self.params['task_ids'], valid_errs)])
-                print("\r\x1b[K Valid: loss: %.5f | acc: %s | error_ratio: %s | instances/sec: %.2f" % (valid_loss,
-                                                                                                        accs_str,
-                                                                                                        errs_str,
+                #accs_str = " ".join(["%i:%.5f" % (id, acc) for (id, acc) in zip(self.params['task_ids'], valid_accs)])
+                #errs_str = " ".join(["%i:%.5f" % (id, err) for (id, err) in zip(self.params['task_ids'], valid_errs)])
+                print("\r\x1b[K Valid: loss: %.5f | instances/sec: %.2f" % (valid_loss,
+                                                                                                        #accs_str,
+                                                                                                        #errs_str,
                                                                                                         valid_speed))
 
                 epoch_time = time.time() - total_time_start
                 log_entry = {
                     'epoch': epoch,
                     'time': epoch_time,
-                    'train_results': (train_loss, train_accs.tolist(), train_errs.tolist(), train_speed),
-                    'valid_results': (valid_loss, valid_accs.tolist(), valid_errs.tolist(), valid_speed),
+                    'train_results': (train_loss, train_speed),
+                    'valid_results': (valid_loss, valid_speed),
                 }
                 log_to_save.append(log_entry)
                 with open(self.log_file, 'w') as f:
                     json.dump(log_to_save, f, indent=4)
-
+                    
+                #accuracy is needed
                 val_acc = np.sum(valid_accs)  # type: float
                 if val_acc < best_val_acc:
                     self.save_progress(self.best_model_file, self.train_step_id, self.valid_step_id)
