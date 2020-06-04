@@ -43,7 +43,9 @@ class ChemModel(object):
             'random_seed': 0,
 
             'train_file': 'molecules_train.json',
-            'valid_file': 'molecules_valid.json'
+            'valid_file': 'molecules_valid.json',
+            
+            'maxLength': 100
         }
 
     def __init__(self, args):
@@ -157,6 +159,17 @@ class ChemModel(object):
                                                      hparams)
         hparams.problem_hparams = p_hparams
         self.model = model_cls(hparams, tf.estimator.ModeKeys.TRAIN, p_hparams)
+        
+        self.placeholders['inputs'] = tf.placeholder(tf.int32, [None,params['maxLength']],
+                                                            name='inputs')
+        self.placeholders['targets'] = tf.placeholder(tf.int32, [None,params['maxLength']],
+                                                            name='targets')
+        features = {
+            "inputs": self.placeholders['inputs'],
+            "targets": self.placeholders['targets'],
+            "target_space_id": 0
+        }
+        self.logits = self.model(features)
 
         self.ops['losses'] = []
         for (internal_id, task_id) in enumerate(self.params['task_ids']):
@@ -235,6 +248,13 @@ class ChemModel(object):
         processed_graphs = 0
         steps = 0
         batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, is_training), max_queue_size=5)
+        
+        with tf.Session() as session:
+            session.run(tf.global_variables_initializer())
+            for my_step, my_batch_data in enumerate(batch_iterator):
+                session.run(logits,feed_dict = my_batch_data)
+        
+            
         for step, batch_data in enumerate(batch_iterator):
             num_graphs = batch_data[self.placeholders['num_graphs']]
             processed_graphs += num_graphs
@@ -247,13 +267,7 @@ class ChemModel(object):
             
             #fetch_list = [input_data, target_data]
             #my_result = self.sess.run(fetch_list,feed_dict = batch_data)
-            features = {
-                "inputs":batch_data[self.placeholders['inputs']]
-                "targets":batch_data[self.placeholders['targets']]
-                "target_space_id":1
-            }
-            logits, _ = self.model(features)
-            output = self.sess.run(logits)
+            #output = self.sess.run(logits)
             
             result = self.sess.run(fetch_list, feed_dict=batch_data)
             (batch_loss, batch_accuracies, batch_summary) = (result[0], result[1], result[2])
