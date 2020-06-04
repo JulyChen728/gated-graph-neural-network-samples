@@ -170,6 +170,13 @@ class ChemModel(object):
             "target_space_id": 0
         }
         self.logits = self.model(features)
+        
+        
+        loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logit=tf.reshape(self.logits, [-1, VOCAB_SIZE]),
+            labels=tf.reshape(features["targets"], [-1]))
+        self.ops['loss'] = tf.reduce_mean(loss)
+        apply_grad = tf.train.AdamOptimizer(0.001).minimize(self.ops['loss'])
 
         self.ops['losses'] = []
         for (internal_id, task_id) in enumerate(self.params['task_ids']):
@@ -205,6 +212,7 @@ class ChemModel(object):
                 else:
                     print("Freezing weights of variable %s." % var.name)
             trainable_vars = filtered_vars
+        #optimize the loss
         optimizer = tf.train.AdamOptimizer(self.params['learning_rate'])
         grads_and_vars = optimizer.compute_gradients(self.ops['loss'], var_list=trainable_vars)
         clipped_grads = []
@@ -214,8 +222,10 @@ class ChemModel(object):
             else:
                 clipped_grads.append((grad, var))
         self.ops['train_step'] = optimizer.apply_gradients(clipped_grads)
+        
         # Initialize newly-introduced variables:
-        self.sess.run(tf.local_variables_initializer())
+        #self.sess.run(tf.local_variables_initializer())
+        self.sess.run(tf.global_variables_initializer())
 
     def make_summaries(self):
         with tf.name_scope('summary'):
@@ -250,11 +260,13 @@ class ChemModel(object):
         batch_iterator = ThreadedIterator(self.make_minibatch_iterator(data, is_training), max_queue_size=5)
         
         with tf.Session() as session:
-            session.run(tf.global_variables_initializer())
-            for my_step, my_batch_data in enumerate(batch_iterator):
-                session.run(logits,feed_dict = my_batch_data)
-        
             
+            for my_step, my_batch_data in enumerate(batch_iterator):
+                #other information should be in fetch_list like loss
+                fetch_list = [self.ops['loss'], logits, self.ops['summary'], self.ops['train_step']]
+                result = session.run(fetch_list,feed_dict = my_batch_data)
+                #result is the output layer
+                   
         for step, batch_data in enumerate(batch_iterator):
             num_graphs = batch_data[self.placeholders['num_graphs']]
             processed_graphs += num_graphs
