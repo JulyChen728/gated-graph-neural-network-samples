@@ -58,9 +58,21 @@ class MYTRANSFORMERModel(ChemModel):
                 for key in d:
                     #key is the file name
                     file_full_name = dir + key
-                    with open(file_full_name,"r") as fp:
+                    #read in the file content in binary format
+                    with open(file_full_name,"rb") as fp:
                         input = fp.read() 
-                        inputs.append(input)
+                        count = len(input)%32
+                        if count!=0:
+                            #add 0
+                            input = '0'*(32-count) + input
+                        input_vertor = [] 
+                        i = 0
+                        while i < len(input):
+                            temps = input[i:i+32]
+                            tempi = int(temps,2)
+                            input_vector.append(tempi)
+                            i = i + 32  
+                        inputs.append(input_vertor)
                     target = d[key]
                     targets.append(target)
                     num_sample += 1
