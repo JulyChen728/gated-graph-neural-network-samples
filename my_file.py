@@ -87,4 +87,19 @@ class MYTRANSFORMERModel(ChemModel):
             
         assert num_sample == len(data)
         
-        
+ def main():
+    args = docopt(__doc__)
+    try:
+        model = MYTRANSFORMERModel(args)
+        if args['--evaluate']:
+            model.example_evaluation()
+        else:
+            model.train()
+    except:
+        typ, value, tb = sys.exc_info()
+        traceback.print_exc()
+        pdb.post_mortem(tb)
+
+
+if __name__ == "__main__":
+    main()       
